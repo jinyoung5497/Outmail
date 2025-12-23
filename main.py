@@ -52,9 +52,19 @@ def scrape_google_pages(search_query, max_pages=3):
             all_data.extend(current_data)
 
             if current_page < max_pages:
-                if not move_to_next_page(driver):
-                    print("요청한 마지막 페이지입니다.")
-                    break
+                if not move_to_next_page(driver): break
+
+        for data in all_data:
+            try:
+                driver.get(data['link'])
+                time.sleep(random.uniform(2, 4)) # 로딩 대기
+                
+                # find_emails 결과를 바로 data 딕셔너리에 추가
+                data['emails'] = find_emails(driver) 
+                print(f"[{data['title']}] 찾은 이메일: {data['emails']}")
+            except:
+                data['emails'] = []
+                print(f"방문 실패: {data['link']}")
 
         print(f"\n총 {len(all_data)}건의 데이터를 수집했습니다.")
 
