@@ -10,6 +10,30 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+def send_individual_gmail(sender_email, to_email, company_name, subject, body_template):
+    app_password = "xxaw ckae rlvk gylq" # 앱 비밀번호 (보안 주의)
+    
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender_email, app_password)
+
+        # 업체명 개인화 적용
+        personalized_body = body_template.replace("{company_name}", company_name)
+
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(personalized_body, 'plain'))
+
+        server.sendmail(sender_email, to_email, msg.as_string())
+        print(f"발송 성공: {company_name} ({to_email})")
+
+        server.quit()
+    except Exception as e:
+        print(f"메일 발송 중 에러 발생 ({to_email}): {e}")
+
 def send_gmail(sender_email, bcc_emails, subject, body):
     app_password = "xxaw ckae rlvk gylq" 
     
@@ -183,61 +207,19 @@ def scrape_google_pages(search_query, start_page=1, max_pages=3):
        
 
 if __name__ == "__main__":
-    query = "London IV drips"
+    query = "New York IV drips distributor"
     results = scrape_google_pages(query, start_page=1, max_pages=3)
 
-    # 1. 수집된 데이터가 있는지 확인
     if results:
-        # 2. 데이터 가공: 리스트 형태인 이메일을 쉼표로 구분된 문자열로 변환
-        processed_data = []
-        for item in results:
-            processed_data.append({
-                "name": item.get('title', ''),
-                "link": item.get('link', ''),
-                "emails": ", ".join(item.get('emails', []))
-            })
-
-        # 3. 데이터프레임 생성
-        df = pd.DataFrame(processed_data)
-
-        filename = "google_results_combined.xlsx"
-        
-        try:
-            # 기존 파일이 있는지 확인
-            if os.path.exists(filename):
-                # 기존 파일 불러오기
-                existing_df = pd.read_excel(filename, engine='openpyxl')
-                # 새로운 데이터와 합치기
-                updated_df = pd.concat([existing_df, df], ignore_index=True)
-                # 중복된 링크가 있을 경우 제거
-                updated_df = updated_df.drop_duplicates(subset=['link'], keep='last')
-                updated_df.to_excel(filename, index=False, engine='openpyxl')
-                print(f"기존 파일에 데이터를 추가했습니다: {filename}")
-            else:
-                # 파일이 없으면 새로 생성
-                df.to_excel(filename, index=False, engine='openpyxl')
-                print(f"새로운 파일을 생성했습니다: {filename}")
-                
-        except Exception as e:
-            print(f"엑셀 저장 중 오류 발생: {e}")
-
-        # 5. 수집된 이메일들로 메일 발송하기
-        # 중복을 제거한 모든 이메일 리스트 만들기
-        all_emails_to_send = []
-        for item in results:
-            all_emails_to_send.extend(item.get('emails', []))
-        
-        # 중복 제거 및 유효한 이메일만 필터링
-        unique_emails = list(set([e for e in all_emails_to_send if "@" in e]))
-        
-        my_email = "jinyoung@nexus-pharma.com"    
+        my_email = "jinyoung@nexus-pharma.com"
         mail_subject = "[Nexus Pharma] Direct Source: Korean Medical Aesthetics & IV Injections"
-        mail_body = """Hello, This is Jin from Nexus Pharma.
+        mail_template = """Hello {company_name}, 
+
+This is Jin from Nexus Pharma.
 
 We are a Korean wholesale pharmaceutical distributor specializing in medical-grade products.
 
 Our portfolio includes:
-
  • IV Injections & Vitamin Injections
  • Dermal Fillers & Botulinum Toxins
  • Skin Boosters & Mesotherapy
@@ -255,26 +237,20 @@ Looking forward to hearing from you.
 Kind regards,
 Jinyoung Choi"""
 
-        if unique_emails:
-            chunk_size = 30  # 한 번에 보낼 묶음 단위
-            total_emails = len(unique_emails)
-
-            # 30명씩 리스트를 잘라서 발송
-            for i in range(0, total_emails, chunk_size):
-                chunk = unique_emails[i : i + chunk_size]
-                current_group = (i // chunk_size) + 1
-                
-                # 실제 발송 함수 호출 | chunk : ["jinyoung5497@gmail.com"]
-                send_gmail(my_email, chunk, mail_subject, mail_body)
-                
-                # 그룹 간 발송 사이에 간격을 두어 스팸 차단 방지 (예: 5~10초)
-                if i + chunk_size < total_emails:
-                    wait_time = random.uniform(5, 10)
+        print("\n--- 개별 메일 발송 시작 ---")
+        
+        for item in results:
+            company = item.get('title', '') # 업체명이 없으면 공백으로 대체
+            emails = item.get('emails', [])
+            
+            for target_email in emails:
+                if "@" in target_email:
+                    # 1:1 발송 호출
+                    send_individual_gmail(my_email, target_email, company, mail_subject, mail_template)
+                    
+                    # 스팸 방지를 위해 발송 사이 간격을 충분히 둠 (15~30초 추천)
+                    wait_time = random.uniform(10, 15)
+                    print(f"다음 발송까지 {wait_time:.1f}초 대기 중...")
                     time.sleep(wait_time)
 
-            print("\n--- 모든 그룹의 메일 발송이 완료되었습니다. ---")
-        else:
-            print("발송할 유효한 이메일 주소가 없습니다.")
-
-    else:
-        print("수집된 데이터가 없어 엑셀 파일을 생성하지 않습니다.")
+        print("\n--- 모든 메일 발송 작업이 완료되었습니다. ---")
